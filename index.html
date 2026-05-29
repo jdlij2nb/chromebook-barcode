@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chromebook Barcode</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #f1f5f9;
+            margin: 0;
+        }
+        .card {
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 90%;
+            width: 500px;
+        }
+        h1 {
+            font-size: 1.75rem;
+            color: #0f172a;
+            margin: 0 0 20px 0;
+        }
+        .barcode-container {
+            margin: 25px 0;
+        }
+        .label {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #475569;
+            margin-top: 8px;
+        }
+        .error {
+            color: #b91c1c;
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 1rem;
+            text-align: left;
+            line-height: 1.5;
+        }
+        code {
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>Chromebook Barcode</h1>
+        <div id="status">Reading system hardware via API...</div>
+        <div id="output"></div>
+    </div>
+
+    <script>
+        // Secure helper to bridge both Promise and Callback styles of the native ChromeOS Web API
+        function getDeviceAttribute(methodName) {
+            return new Promise((resolve) => {
+                if (!window.navigator || !navigator.managed || typeof navigator.managed[methodName] !== 'function') {
+                    resolve(null);
+                    return;
+                }
+                try {
+                    const response = navigator.managed[methodName]();
+                    if (response instanceof Promise) {
+                        response.then(resolve).catch(() => resolve(null));
+                    } else if (typeof response === 'string') {
+                        resolve(response);
+                    } else {
+                        navigator.managed[methodName]((val) => resolve(val));
+                    }
+                } catch (err) {
+                    try {
+                        navigator.managed[methodName]((val) => resolve(val));
+                    } catch (e) {
+                        resolve(null);
+                    }
+                }
+            });
+        }
+
+        window.onload = async function() {
+            const statusDiv = document.getElementById('status');
+            const outputDiv = document.getElementById('output');
+
+            // Fire API requests straight into the ChromeOS hardware shell
+            const serialNumber = await getDeviceAttribute('getSerialNumber');
+            const assetId = await getDeviceAttribute('getAssetId');
+
+            if (!serialNumber) {
+                statusDiv.style.display = 'none';
+                outputDiv.innerHTML = `
+                    <div class="error">
+                        <strong>Hardware API Access Denied</strong><br><br>
+                        The webpage couldn't look up the machine's attributes.<br><br>
+                        <strong>Fix:</strong> Open your Google Admin app configuration and ensure the 
+                        <code>Enable Device Attributes API</code> switch is toggled <strong>ON</strong>.
+                    </div>`;
+                return;
+            }
+
+            statusDiv.style.display = 'none';
+
+            // Generate Layout
+            let htmlContent = `
+                <div class="barcode-container">
+                    <svg id="serial-barcode"></svg>
+                    <div class="label">Serial Number: ${serialNumber}</div>
+                </div>`;
+
+            if (assetId && assetId.trim() !== "") {
+                htmlContent += `
+                    <div class="barcode-container" style="margin-top: 40px; border-top: 1px dashed #cbd5e1; padding-top: 30px;">
+                        <svg id="asset-barcode"></svg>
+                        <div class="label">Asset ID: ${assetId}</div>
+                    </div>`;
+            }
+
+            outputDiv.innerHTML = htmlContent;
+
+            // Render Serial Barcode
+            JsBarcode("#serial-barcode", serialNumber, {
+                format: "CODE128",
+                lineColor: "#0f172a",
+                width: 2.5,
+                height: 90,
+                displayValue: false
+            });
+
+            // Render Asset Barcode if assigned
+            if (assetId && assetId.trim() !== "") {
+                JsBarcode("#asset-barcode", assetId, {
+                    format: "CODE128",
+                    lineColor: "#0f172a",
+                    width: 2.5,
+                    height: 90,
+                    displayValue: false
+                });
+            }
+        };
+    </script>
+</body>
+</html>
